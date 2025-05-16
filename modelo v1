@@ -1,0 +1,711 @@
+import os
+import json
+import requests
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import hashlib
+import socket
+import subprocess
+import yfinance as yf
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+import matplotlib.pyplot as plt
+from cryptography.fernet import Fernet
+from abc import ABC, abstractmethod
+import getpass
+import logging
+from typing import Dict, List, Optional, Union
+import nmap
+import whois
+import dns.resolver
+import re
+from bs4 import BeautifulSoup
+import talib
+import seaborn as sns
+from scipy import stats
+
+# Configuración de logging
+logging.basicConfig(
+    filename='financial_hacking_assistant.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+class AuthenticationSystem:
+    """Sistema de autenticación básico con hash de contraseñas"""
+
+    def __init__(self):
+        self.users = {}
+        self.load_users()
+
+    def load_users(self):
+        """Carga usuarios desde archivo"""
+        try:
+            with open('users.json', 'r') as f:
+                self.users = json.load(f)
+        except FileNotFoundError:
+            self.users = {}
+
+    def save_users(self):
+        """Guarda usuarios en archivo"""
+        with open('users.json', 'w') as f:
+            json.dump(self.users, f)
+
+    def hash_password(self, password: str) -> str:
+        """Genera hash de contraseña"""
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def register_user(self, username: str, password: str) -> bool:
+        """Registra un nuevo usuario"""
+        if username in self.users:
+            return False
+
+        self.users[username] = {
+            'password': self.hash_password(password),
+            'permissions': ['financial_analysis', 'basic_security'],
+            'last_login': None
+        }
+        self.save_users()
+        return True
+
+    def authenticate(self, username: str, password: str) -> bool:
+        """Autentica un usuario"""
+        if username not in self.users:
+            return False
+
+        if self.users[username]['password'] == self.hash_password(password):
+            self.users[username]['last_login'] = str(datetime.now())
+            self.save_users()
+            return True
+        return False
+
+    def has_permission(self, username: str, permission: str) -> bool:
+        """Verifica permisos de usuario"""
+        return permission in self.users.get(username, {}).get('permissions', [])
+
+class FinancialAnalysisModule:
+    """Módulo avanzado de análisis financiero"""
+
+    def __init__(self):
+        self.models = {
+            'linear_regression': LinearRegression(),
+            'random_forest': RandomForestRegressor(n_estimators=100)
+        }
+
+    def get_stock_data(self, ticker: str, period: str = '1y') -> pd.DataFrame:
+        """Obtiene datos históricos de acciones"""
+        try:
+            stock = yf.Ticker(ticker)
+            return stock.history(period=period)
+        except Exception as e:
+            logging.error(f"Error al obtener datos de {ticker}: {str(e)}")
+            return pd.DataFrame()
+
+    def calculate_technical_indicators(self, data: pd.DataFrame) -> Dict:
+        """Calcula indicadores técnicos"""
+        if data.empty:
+            return {}
+
+        indicators = {
+            'SMA_20': talib.SMA(data['Close'], timeperiod=20),
+            'SMA_50': talib.SMA(data['Close'], timeperiod=50),
+            'RSI': talib.RSI(data['Close'], timeperiod=14),
+            'MACD': talib.MACD(data['Close'])[0],
+            'BB_upper': talib.BBANDS(data['Close'], timeperiod=20)[0],
+            'BB_lower': talib.BBANDS(data['Close'], timeperiod=20)[2]
+        }
+
+        return indicators
+
+    def analyze_stock(self, ticker: str, period: str = '1y') -> Dict:
+        """Analiza una acción con múltiples indicadores"""
+        data = self.get_stock_data(ticker, period)
+        if data.empty:
+            return {'error': 'No se encontraron datos'}
+
+        indicators = self.calculate_technical_indicators(data)
+        current_price = data['Close'].iloc[-1]
+
+        # Análisis de tendencia
+        trend = "Alcista" if current_price > indicators['SMA_50'].iloc[-1] else "Bajista"
+
+        # Señales de compra/venta
+        signals = []
+        if indicators['RSI'].iloc[-1] < 30:
+            signals.append("RSI indica sobreventa (posible compra)")
+        elif indicators['RSI'].iloc[-1] > 70:
+            signals.append("RSI indica sobrecompra (posible venta)")
+
+        if current_price > indicators['BB_upper'].iloc[-1]:
+            signals.append("Precio por encima de banda superior de Bollinger (posible venta)")
+        elif current_price < indicators['BB_lower'].iloc[-1]:
+            signals.append("Precio por debajo de banda inferior de Bollinger (posible compra)")
+
+        return {
+            'ticker': ticker,
+            'current_price': current_price,
+            'trend': trend,
+            'indicators': indicators,
+            'signals': signals if signals else ["No hay señales claras"],
+            'recommendation': self.generate_recommendation(data, indicators)
+        }
+
+    def generate_recommendation(self, data: pd.DataFrame, indicators: Dict) -> str:
+        """Genera recomendación basada en análisis técnico"""
+        current_price = data['Close'].iloc[-1]
+        sma_50 = indicators['SMA_50'].iloc[-1]
+        rsi = indicators['RSI'].iloc[-1]
+
+        if current_price > sma_50 and rsi < 70:
+            return "COMPRAR (tendencia alcista con RSI neutral)"
+        elif current_price < sma_50 and rsi > 30:
+            return "VENDER (tendencia bajista con RSI neutral)"
+        else:
+            return "MANTENER (señales mixtas)"
+
+    def portfolio_analysis(self, tickers: List[str], weights: List[float]) -> Dict:
+        """Analiza un portafolio de inversiones"""
+        if len(tickers) != len(weights):
+            return {'error': 'Número de tickers y pesos no coincide'}
+
+        results = []
+        total_value = 0
+        for ticker, weight in zip(tickers, weights):
+            analysis = self.analyze_stock(ticker)
+            if 'error' in analysis:
+                continue
+
+            value = analysis['current_price'] * weight
+            total_value += value
+            results.append({
+                'ticker': ticker,
+                'weight': weight,
+                'value': value,
+                'analysis': analysis
+            })
+
+        # Cálculo de métricas de portafolio
+        returns = [r['analysis']['current_price'] / self.get_stock_data(r['ticker'], '1d')['Close'].iloc[0] - 1
+                  for r in results if not self.get_stock_data(r['ticker'], '1d').empty]
+
+        portfolio_metrics = {
+            'total_value': total_value,
+            'expected_return': np.mean(returns) if returns else 0,
+            'volatility': np.std(returns) if returns else 0,
+            'sharpe_ratio': (np.mean(returns) / np.std(returns)) if returns and np.std(returns) != 0 else 0
+        }
+
+        return {
+            'results': results,
+            'portfolio_metrics': portfolio_metrics
+        }
+
+class EthicalHackingModule:
+    """Módulo de hacking ético con herramientas avanzadas"""
+
+    def __init__(self):
+        self.nm = nmap.PortScanner()
+
+    def network_scan(self, target: str, ports: str = '1-1000', arguments: str = '-sV') -> Dict:
+        """Escaneo de red avanzado con Nmap"""
+        try:
+            logging.info(f"Iniciando escaneo de {target} en puertos {ports}")
+            self.nm.scan(hosts=target, ports=ports, arguments=arguments)
+
+            results = {
+                'host': target,
+                'scan_info': self.nm.scaninfo(),
+                'scan_stats': self.nm.scanstats(),
+                'hosts': []
+            }
+
+            for host in self.nm.all_hosts():
+                host_info = {
+                    'address': host,
+                    'hostname': self.nm[host].hostname(),
+                    'state': self.nm[host].state(),
+                    'protocols': list(self.nm[host].all_protocols()),
+                    'ports': []
+                }
+
+                for proto in host_info['protocols']:
+                    ports = self.nm[host][proto].keys()
+                    for port in ports:
+                        port_info = {
+                            'port': port,
+                            'protocol': proto,
+                            'state': self.nm[host][proto][port]['state'],
+                            'service': self.nm[host][proto][port]['name'],
+                            'version': self.nm[host][proto][port].get('version', ''),
+                            'product': self.nm[host][proto][port].get('product', ''),
+                            'extrainfo': self.nm[host][proto][port].get('extrainfo', '')
+                        }
+                        host_info['ports'].append(port_info)
+
+                results['hosts'].append(host_info)
+
+            return results
+        except Exception as e:
+            logging.error(f"Error en escaneo de red: {str(e)}")
+            return {'error': str(e)}
+
+    def whois_lookup(self, domain: str) -> Dict:
+        """Consulta de información WHOIS"""
+        try:
+            domain_info = whois.whois(domain)
+            return {
+                'domain': domain,
+                'registrar': domain_info.registrar,
+                'creation_date': str(domain_info.creation_date),
+                'expiration_date': str(domain_info.expiration_date),
+                'name_servers': domain_info.name_servers,
+                'emails': domain_info.emails,
+                'status': domain_info.status
+            }
+        except Exception as e:
+            logging.error(f"Error en consulta WHOIS: {str(e)}")
+            return {'error': str(e)}
+
+    def dns_enum(self, domain: str) -> Dict:
+        """Enumeración de registros DNS"""
+        try:
+            record_types = ['A', 'AAAA', 'MX', 'NS', 'TXT', 'SOA']
+            results = {}
+
+            for record in record_types:
+                try:
+                    answers = dns.resolver.resolve(domain, record)
+                    results[record] = [str(r) for r in answers]
+                except:
+                    results[record] = None
+
+            return {
+                'domain': domain,
+                'records': results
+            }
+        except Exception as e:
+            logging.error(f"Error en enumeración DNS: {str(e)}")
+            return {'error': str(e)}
+
+    def web_vulnerability_scan(self, url: str) -> Dict:
+        """Escaneo básico de vulnerabilidades web"""
+        vulnerabilities = []
+
+        try:
+            # Verificar headers de seguridad
+            headers = requests.head(url, timeout=5).headers
+
+            if 'X-XSS-Protection' not in headers:
+                vulnerabilities.append("Falta header X-XSS-Protection")
+            if 'Content-Security-Policy' not in headers:
+                vulnerabilities.append("Falta header Content-Security-Policy")
+            if 'Strict-Transport-Security' not in headers:
+                vulnerabilities.append("Falta header Strict-Transport-Security")
+
+            # Verificar cookies seguras
+            response = requests.get(url, timeout=5)
+            cookies = response.cookies
+            for cookie in cookies:
+                if not cookie.secure:
+                    vulnerabilities.append(f"Cookie '{cookie.name}' no es segura (falta flag Secure)")
+                if not cookie.has_nonstandard_attr('HttpOnly'):
+                    vulnerabilities.append(f"Cookie '{cookie.name}' no tiene flag HttpOnly")
+
+            # Verificar formularios (muy básico)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            forms = soup.find_all('form')
+            for form in forms:
+                if not form.get('action', '').startswith('https://'):
+                    vulnerabilities.append(f"Formulario en {form.get('action')} no usa HTTPS")
+
+            return {
+                'url': url,
+                'vulnerabilities': vulnerabilities,
+                'status': 'Escaneo completado'
+            }
+        except Exception as e:
+            logging.error(f"Error en escaneo de vulnerabilidades: {str(e)}")
+            return {'error': str(e)}
+
+class FinancialHackingAssistant:
+    """Asistente principal que integra todos los módulos"""
+
+    def __init__(self):
+        self.auth = AuthenticationSystem()
+        self.finance = FinancialAnalysisModule()
+        self.hacking = EthicalHackingModule()
+        self.current_user = None
+        self.session_log = []
+
+    def login(self, username: str, password: str) -> bool:
+        """Inicia sesión en el sistema"""
+        if self.auth.authenticate(username, password):
+            self.current_user = username
+            logging.info(f"Usuario {username} ha iniciado sesión")
+            return True
+        return False
+
+    def register(self, username: str, password: str) -> bool:
+        """Registra un nuevo usuario"""
+        return self.auth.register_user(username, password)
+
+    def has_permission(self, permission: str) -> bool:
+        """Verifica permisos del usuario actual"""
+        if not self.current_user:
+            return False
+        return self.auth.has_permission(self.current_user, permission)
+
+    def log_action(self, action: str, details: Dict = None):
+        """Registra una acción en el log de sesión"""
+        log_entry = {
+            'timestamp': str(datetime.now()),
+            'user': self.current_user,
+            'action': action,
+            'details': details or {}
+        }
+        self.session_log.append(log_entry)
+        logging.info(f"Usuario {self.current_user} realizó: {action}")
+
+    def analyze_stock(self, ticker: str, period: str = '1y') -> Dict:
+        """Analiza una acción (requiere permiso)"""
+        if not self.has_permission('financial_analysis'):
+            return {'error': 'Permiso denegado'}
+
+        result = self.finance
+
+    def portfolio_analysis(self, tickers: List[str], weights: List[float]) -> Dict:
+        """Analiza un portafolio de inversiones (requiere permiso)"""
+        if not self.has_permission('financial_analysis'):
+            return {'error': 'Permiso denegado'}
+
+        result = self.finance.portfolio_analysis(tickers, weights)
+        self.log_action('portfolio_analysis', {'tickers': tickers})
+        return result
+
+    def network_scan(self, target: str, ports: str = '1-1000') -> Dict:
+        """Realiza un escaneo de red (requiere permiso)"""
+        if not self.has_permission('network_scanning'):
+            return {'error': 'Permiso denegado'}
+
+        result = self.hacking.network_scan(target, ports)
+        self.log_action('network_scan', {'target': target, 'ports': ports})
+        return result
+
+    def whois_lookup(self, domain: str) -> Dict:
+        """Realiza una consulta WHOIS (requiere permiso)"""
+        if not self.has_permission('domain_analysis'):
+            return {'error': 'Permiso denegado'}
+
+        result = self.hacking.whois_lookup(domain)
+        self.log_action('whois_lookup', {'domain': domain})
+        return result
+
+    def web_vulnerability_scan(self, url: str) -> Dict:
+        """Escanea vulnerabilidades web (requiere permiso)"""
+        if not self.has_permission('vulnerability_scanning'):
+            return {'error': 'Permiso denegado'}
+
+        result = self.hacking.web_vulnerability_scan(url)
+        self.log_action('web_vulnerability_scan', {'url': url})
+        return result
+
+    def generate_report(self, report_type: str, parameters: Dict) -> Dict:
+        """Genera un reporte personalizado"""
+        if report_type == 'financial':
+            return self._generate_financial_report(parameters)
+        elif report_type == 'security':
+            return self._generate_security_report(parameters)
+        else:
+            return {'error': 'Tipo de reporte no válido'}
+
+    def _generate_financial_report(self, parameters: Dict) -> Dict:
+        """Genera un reporte financiero detallado"""
+        if 'tickers' not in parameters:
+            return {'error': 'Faltan parámetros'}
+
+        report = {
+            'type': 'financial',
+            'timestamp': str(datetime.now()),
+            'analyses': []
+        }
+
+        for ticker in parameters['tickers']:
+            analysis = self.analyze_stock(ticker, parameters.get('period', '1y'))
+            report['analyses'].append(analysis)
+
+        # Generar visualizaciones
+        if parameters.get('generate_plots', False):
+            report['plots'] = self._generate_financial_plots(parameters['tickers'])
+
+        self.log_action('generate_financial_report', parameters)
+        return report
+
+    def _generate_financial_plots(self, tickers: List[str]) -> List[str]:
+        """Genera gráficos financieros"""
+        plots = []
+        for ticker in tickers:
+            try:
+                data = self.finance.get_stock_data(ticker)
+                if not data.empty:
+                    plt.figure(figsize=(10, 5))
+                    plt.plot(data['Close'], label='Precio de Cierre')
+                    plt.title(f'Precio de {ticker}')
+                    plt.xlabel('Fecha')
+                    plt.ylabel('Precio')
+                    plt.legend()
+
+                    # Guardar gráfico temporalmente
+                    plot_path = f'temp_{ticker}_plot.png'
+                    plt.savefig(plot_path)
+                    plt.close()
+                    plots.append(plot_path)
+            except Exception as e:
+                logging.error(f"Error al generar gráfico para {ticker}: {str(e)}")
+
+        return plots
+
+    def _generate_security_report(self, parameters: Dict) -> Dict:
+        """Genera un reporte de seguridad"""
+        if 'target' not in parameters:
+            return {'error': 'Falta parámetro target'}
+
+        report = {
+            'type': 'security',
+            'timestamp': str(datetime.now()),
+            'results': []
+        }
+
+        # Escaneo de red
+        if parameters.get('network_scan', False):
+            scan_result = self.network_scan(parameters['target'])
+            report['results'].append({
+                'type': 'network_scan',
+                'data': scan_result
+            })
+
+        # WHOIS
+        if parameters.get('whois_lookup', False):
+            whois_result = self.whois_lookup(parameters['target'])
+            report['results'].append({
+                'type': 'whois_lookup',
+                'data': whois_result
+            })
+
+        # Vulnerabilidades web
+        if parameters.get('web_scan', False):
+            web_scan_result = self.web_vulnerability_scan(parameters['target'])
+            report['results'].append({
+                'type': 'web_vulnerability_scan',
+                'data': web_scan_result
+            })
+
+        self.log_action('generate_security_report', parameters)
+        return report
+
+    def save_report(self, report: Dict, filename: str) -> str:
+        """Guarda un reporte en un archivo"""
+        try:
+            with open(filename, 'w') as f:
+                json.dump(report, f, indent=4)
+            self.log_action('save_report', {'filename': filename})
+            return f"Reporte guardado en {filename}"
+        except Exception as e:
+            logging.error(f"Error al guardar reporte: {str(e)}")
+            return f"Error al guardar reporte: {str(e)}"
+
+    def get_session_log(self) -> List[Dict]:
+        """Obtiene el log de la sesión actual"""
+        return self.session_log
+
+    def clear_session_log(self) -> str:
+        """Limpia el log de la sesión actual"""
+        self.session_log = []
+        return "Log de sesión limpiado"
+
+class CLIInterface:
+    """Interfaz de línea de comandos para el asistente"""
+
+    def __init__(self):
+        self.assistant = FinancialHackingAssistant()
+
+    def main_menu(self):
+        """Muestra el menú principal"""
+        print("\n=== Asistente de Finanzas y Hacking Ético ===")
+        print("1. Iniciar sesión")
+        print("2. Registrarse")
+        print("3. Salir")
+
+        choice = input("Seleccione una opción: ")
+        return choice
+
+    def financial_menu(self):
+        """Muestra el menú de finanzas"""
+        print("\n=== Módulo de Finanzas ===")
+        print("1. Analizar acción")
+        print("2. Analizar portafolio")
+        print("3. Generar reporte financiero")
+        print("4. Volver al menú principal")
+
+        choice = input("Seleccione una opción: ")
+        return choice
+
+    def security_menu(self):
+        """Muestra el menú de seguridad"""
+        print("\n=== Módulo de Hacking Ético ===")
+        print("1. Escaneo de red")
+        print("2. Consulta WHOIS")
+        print("3. Escaneo de vulnerabilidades web")
+        print("4. Generar reporte de seguridad")
+        print("5. Volver al menú principal")
+
+        choice = input("Seleccione una opción: ")
+        return choice
+
+    def run(self):
+        """Ejecuta la interfaz de línea de comandos"""
+        while True:
+            if not self.assistant.current_user:
+                choice = self.main_menu()
+
+                if choice == '1':
+                    username = input("Usuario: ")
+                    password = getpass.getpass("Contraseña: ")
+                    if self.assistant.login(username, password):
+                        print("Inicio de sesión exitoso!")
+                    else:
+                        print("Credenciales incorrectas")
+                elif choice == '2':
+                    username = input("Nuevo usuario: ")
+                    password = getpass.getpass("Nueva contraseña: ")
+                    if self.assistant.register(username, password):
+                        print("Registro exitoso!")
+                    else:
+                        print("Error en el registro")
+                elif choice == '3':
+                    print("Saliendo...")
+                    break
+                else:
+                    print("Opción no válida")
+            else:
+                print(f"\nUsuario: {self.assistant.current_user}")
+                print("1. Módulo de Finanzas")
+                print("2. Módulo de Hacking Ético")
+                print("3. Ver log de sesión")
+                print("4. Cerrar sesión")
+
+                choice = input("Seleccione una opción: ")
+
+                if choice == '1':
+                    self.handle_financial_menu()
+                elif choice == '2':
+                    self.handle_security_menu()
+                elif choice == '3':
+                    print("\n=== Log de Sesión ===")
+                    for entry in self.assistant.get_session_log():
+                        print(f"{entry['timestamp']} - {entry['action']}")
+                elif choice == '4':
+                    print("Sesión cerrada")
+                    self.assistant.current_user = None
+                else:
+                    print("Opción no válida")
+
+    def handle_financial_menu(self):
+        """Maneja el menú de finanzas"""
+        while True:
+            choice = self.financial_menu()
+
+            if choice == '1':
+                ticker = input("Ingrese el ticker de la acción: ")
+                period = input("Periodo (ej. 1y, 1mo, 1d): ") or '1y'
+                result = self.assistant.analyze_stock(ticker, period)
+                print("\nResultado del análisis:")
+                print(json.dumps(result, indent=2))
+            elif choice == '2':
+                tickers = input("Ingrese tickers separados por coma: ").split(',')
+                weights = input("Ingrese pesos separados por coma: ").split(',')
+                try:
+                    weights = [float(w) for w in weights]
+                    result = self.assistant.portfolio_analysis(tickers, weights)
+                    print("\nResultado del análisis de portafolio:")
+                    print(json.dumps(result, indent=2))
+                except ValueError:
+                    print("Error: pesos deben ser números")
+            elif choice == '3':
+                tickers = input("Ingrese tickers separados por coma: ").split(',')
+                period = input("Periodo (ej. 1y, 1mo, 1d): ") or '1y'
+                generate_plots = input("Generar gráficos? (s/n): ").lower() == 's'
+
+                report = self.assistant.generate_report('financial', {
+                    'tickers': tickers,
+                    'period': period,
+                    'generate_plots': generate_plots
+                })
+
+                filename = input("Nombre del archivo para guardar el reporte: ")
+                save_result = self.assistant.save_report(report, filename)
+                print(save_result)
+            elif choice == '4':
+                break
+            else:
+                print("Opción no válida")
+
+    def handle_security_menu(self):
+        """Maneja el menú de seguridad"""
+        while True:
+            choice = self.security_menu()
+
+            if choice == '1':
+                target = input("Ingrese el objetivo (IP o dominio): ")
+                ports = input("Rango de puertos (ej. 1-1000): ") or '1-1000'
+                result = self.assistant.network_scan(target, ports)
+                print("\nResultado del escaneo de red:")
+                print(json.dumps(result, indent=2))
+            elif choice == '2':
+                domain = input("Ingrese el dominio: ")
+                result = self.assistant.whois_lookup(domain)
+                print("\nResultado de la consulta WHOIS:")
+                print(json.dumps(result, indent=2))
+            elif choice == '3':
+                url = input("Ingrese la URL: ")
+                result = self.assistant.web_vulnerability_scan(url)
+                print("\nResultado del escaneo de vulnerabilidades:")
+                print(json.dumps(result, indent=2))
+            elif choice == '4':
+                target = input("Ingrese el objetivo (IP o dominio): ")
+                network_scan = input("Incluir escaneo de red? (s/n): ").lower() == 's'
+                whois_lookup = input("Incluir consulta WHOIS? (s/n): ").lower() == 's'
+                web_scan = input("Incluir escaneo web? (s/n): ").lower() == 's'
+
+                report = self.assistant.generate_report('security', {
+                    'target': target,
+                    'network_scan': network_scan,
+                    'whois_lookup': whois_lookup,
+                    'web_scan': web_scan
+                })
+
+                filename = input("Nombre del archivo para guardar el reporte: ")
+                save_result = self.assistant.save_report(report, filename)
+                print(save_result)
+            elif choice == '5':
+                break
+            else:
+                print("Opción no válida")
+
+if __name__ == "__main__":
+    # Configurar permisos para el usuario admin
+    auth = AuthenticationSystem()
+    if 'admin' not in auth.users:
+        auth.register_user('admin', 'admin123')
+        auth.users['admin']['permissions'] = [
+            'financial_analysis',
+            'network_scanning',
+            'domain_analysis',
+            'vulnerability_scanning'
+        ]
+        auth.save_users()
+
+    # Iniciar interfaz
+    cli = CLIInterface()
+    cli.run()
+)
